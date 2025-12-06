@@ -1,0 +1,34 @@
+[
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true, "internalType": "uint256", "name": "id", "type": "uint256"},
+      {"indexed": false, "internalType": "string", "name": "description", "type": "string"},
+      {"indexed": true, "internalType": "address", "name": "creator", "type": "address"}
+    ],
+    "name": "ProposalCreated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true, "internalType": "uint256", "name": "id", "type": "uint256"},
+      {"indexed": false, "internalType": "bool", "name": "support", "type": "bool"},
+      {"indexed": true, "internalType": "address", "name": "voter", "type": "address"},
+      {"indexed": false, "internalType": "uint256", "name": "forVotes", "type": "uint256"},
+      {"indexed": false, "internalType": "uint256", "name": "againstVotes", "type": "uint256"},
+      {"indexed": false, "internalType": "enum DAOContract.ProposalStatus", "name": "status", "type": "uint8"}
+    ],
+    "name": "Voted",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {"indexed": true, "internalType": "uint256", "name": "id", "type": "uint256"},
+      {"indexed": true, "internalType": "address", "name": "executor", "type": "address"}
+    ],
+    "name": "ProposalExecuted",
+    "type": "event"
+  }
+]

@@ -13,6 +13,7 @@ FROM gcr.io/distroless/base-debian12:nonroot
 WORKDIR /app
 
 COPY --from=builder /server ./server
+COPY --from=builder /app/app/eth/daoABI.json ./daoABI.json
 
 EXPOSE 8080
 ENTRYPOINT ["./server"]

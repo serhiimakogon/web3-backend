@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net"
 	"net/http"
 	"strconv"
 	"time"
@@ -16,14 +15,24 @@ import (
 type Server struct {
 	addr       string
 	httpServer *http.Server
-	store      *proposalStore
+	store      *ProposalStore
 }
 
-func NewServer(port string) *Server {
-	return &Server{
-		addr:  net.JoinHostPort("0.0.0.0", port),
-		store: newProposalStore(),
+func NewServer(port string, store *ProposalStore) *Server {
+	if store == nil {
+		store = NewProposalStore()
 	}
+	addr := port
+	if addr == "" {
+		addr = ":8080"
+	} else if addr[0] != ':' {
+		addr = ":" + addr
+	}
+	return &Server{addr: addr, store: store}
+}
+
+func (s *Server) Addr() string {
+	return s.addr
 }
 
 func (s *Server) Start(ctx context.Context) error {

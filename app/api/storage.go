@@ -3,59 +3,115 @@ package api
 import (
 	"sort"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
+// Proposal models a DAO proposal stored in-memory.
 type Proposal struct {
-	ID          uint64    `json:"id"`
-	Description string    `json:"description"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	ID            uint64    `json:"id"`
+	Description   string    `json:"description"`
+	Proposer      string    `json:"proposer"`
+	SupportVotes  uint64    `json:"supportVotes"`
+	AgainstVotes  uint64    `json:"againstVotes"`
+	Executed      bool      `json:"executed"`
+	LastSupport   bool      `json:"lastSupport"`
+	LastVoter     string    `json:"lastVoter"`
+	Executor      string    `json:"executor"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+	LastUpdatedBy string    `json:"lastUpdatedBy"`
 }
 
-type proposalStore struct {
+// ProposalStore keeps proposals in memory with simple read/write locking.
+type ProposalStore struct {
 	mu        sync.RWMutex
-	counter   atomic.Uint64
 	proposals map[uint64]Proposal
 }
 
-func newProposalStore() *proposalStore {
-	store := &proposalStore{proposals: make(map[uint64]Proposal)}
-	store.seed()
-	return store
+// NewProposalStore constructs an empty store populated via blockchain events.
+func NewProposalStore() *ProposalStore {
+	return &ProposalStore{proposals: make(map[uint64]Proposal)}
 }
 
-func (ps *proposalStore) seed() {
-	mockProposals := []string{
-		"Enable staking rewards redistribution",
-		"Launch developer grants program",
-		"Reduce transaction fees by 10%",
-	}
-
-	for _, description := range mockProposals {
-		ps.CreateProposal(description)
-	}
-}
-
-func (ps *proposalStore) CreateProposal(description string) Proposal {
+// HandleProposalCreated upserts a proposal originating from the DAO contract.
+func (ps *ProposalStore) HandleProposalCreated(id uint64, description, creator string, observedAt time.Time) Proposal {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 
-	now := time.Now().UTC()
-	id := ps.counter.Add(1)
-	proposal := Proposal{
-		ID:          id,
-		Description: description,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+	proposal, exists := ps.proposals[id]
+	proposal.ID = id
+	proposal.Description = description
+	proposal.Proposer = creator
+	proposal.LastUpdatedBy = creator
+	proposal.Executor = ""
+	proposal.Executed = false
+	proposal.LastVoter = ""
+	proposal.LastSupport = false
+	proposal.SupportVotes = 0
+	proposal.AgainstVotes = 0
+	proposal.UpdatedAt = observedAt
+	if !exists || proposal.CreatedAt.IsZero() {
+		proposal.CreatedAt = observedAt
 	}
 
 	ps.proposals[id] = proposal
 	return proposal
 }
 
-func (ps *proposalStore) ListProposals() []Proposal {
+// HandleVote records a vote and updates vote counters for a proposal.
+func (ps *ProposalStore) HandleVote(
+	id uint64,
+	support bool,
+	voter string,
+	supportVotes uint64,
+	againstVotes uint64,
+	executed bool,
+	observedAt time.Time,
+) Proposal {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+
+	proposal := ps.ensureProposalExists(id, observedAt)
+	proposal.SupportVotes = supportVotes
+	proposal.AgainstVotes = againstVotes
+	proposal.LastSupport = support
+	proposal.LastVoter = voter
+	proposal.LastUpdatedBy = voter
+	proposal.Executed = executed
+	if !executed {
+		proposal.Executor = ""
+	}
+	proposal.UpdatedAt = observedAt
+	ps.proposals[id] = proposal
+	return proposal
+}
+
+// HandleProposalExecuted marks a proposal as executed and stores executor info.
+func (ps *ProposalStore) HandleProposalExecuted(id uint64, executor string, observedAt time.Time) Proposal {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+
+	proposal := ps.ensureProposalExists(id, observedAt)
+	proposal.Executed = true
+	proposal.Executor = executor
+	proposal.LastUpdatedBy = executor
+	proposal.UpdatedAt = observedAt
+	ps.proposals[id] = proposal
+	return proposal
+}
+
+func (ps *ProposalStore) ensureProposalExists(id uint64, observedAt time.Time) Proposal {
+	proposal, exists := ps.proposals[id]
+	if !exists {
+		proposal = Proposal{ID: id, CreatedAt: observedAt}
+	} else if proposal.CreatedAt.IsZero() {
+		proposal.CreatedAt = observedAt
+	}
+	return proposal
+}
+
+// ListProposals returns proposals sorted by ID.
+func (ps *ProposalStore) ListProposals() []Proposal {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
 
@@ -71,7 +127,8 @@ func (ps *proposalStore) ListProposals() []Proposal {
 	return proposals
 }
 
-func (ps *proposalStore) GetProposal(id uint64) (Proposal, bool) {
+// GetProposal fetches a proposal by ID.
+func (ps *ProposalStore) GetProposal(id uint64) (Proposal, bool) {
 	ps.mu.RLock()
 	defer ps.mu.RUnlock()
 
